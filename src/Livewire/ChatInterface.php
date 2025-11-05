@@ -10,10 +10,13 @@ use Vizra\VizraADK\Facades\Agent;
 use Vizra\VizraADK\Models\AgentSession;
 use Vizra\VizraADK\Models\TraceSpan;
 use Vizra\VizraADK\Services\StateManager;
+use Vizra\VizraADK\Traits\BuildsTraceData;
 
 #[Layout('vizra-adk::layouts.app')]
 class ChatInterface extends Component
 {
+    use BuildsTraceData;
+
     public string $selectedAgent = '';
 
     public array $registeredAgents = [];
@@ -591,179 +594,6 @@ class ChatInterface extends Component
             $this->traceData = ['error' => $e->getMessage()];
             $this->hasRunningTraces = false;
         }
-    }
-
-    private function buildTraceTree($spans)
-    {
-        $spansByParent = $spans->groupBy('parent_span_id');
-        $rootSpans = $spansByParent->get(null) ?? collect();
-
-        return $rootSpans->map(function ($span) use ($spansByParent) {
-            return $this->buildSpanNode($span, $spansByParent);
-        })->toArray();
-    }
-
-    private function buildSpanNode($span, $spansByParent)
-    {
-        $children = $spansByParent->get($span->span_id) ?? collect();
-
-        // Calculate duration from decimal timestamps
-        $duration = null;
-        $startFormatted = null;
-        $endFormatted = null;
-
-        if ($span->start_time) {
-            $startTime = \Carbon\Carbon::createFromTimestamp($span->start_time);
-            $startFormatted = $startTime->format('H:i:s.v');
-
-            if ($span->end_time) {
-                $endTime = \Carbon\Carbon::createFromTimestamp($span->end_time);
-                $endFormatted = $endTime->format('H:i:s.v');
-                $duration = round(($span->end_time - $span->start_time) * 1000, 2); // Convert to milliseconds
-            }
-        }
-
-        // Helper function to safely handle data that could be strings, arrays, or null
-        $processData = function ($data) {
-            if (is_null($data)) {
-                return null;
-            }
-            if (is_array($data)) {
-                return $data;
-            }
-            if (is_string($data)) {
-                // Try to decode if it's a JSON string
-                $decoded = json_decode($data, true);
-
-                return (json_last_error() === JSON_ERROR_NONE) ? $decoded : $data;
-            }
-
-            // For any other type, convert to string for safe display
-            return (string) $data;
-        };
-
-        // Initialize context variables
-        $contextState = null;
-        $contextChanges = null;
-        $extractedJson = null;
-
-        // First, check if we have context_state captured in the span's metadata
-        $metadata = $processData($span->metadata);
-        if (is_array($metadata) && isset($metadata['context_state'])) {
-            // Use the captured context state from the span metadata
-            $contextState = $metadata['context_state'];
-        } else {
-            // Fallback: Get actual context data from AgentSession (for older traces)
-            try {
-                // Get the actual session data
-                $session = AgentSession::where('session_id', $span->session_id)->first();
-
-                if ($session) {
-                    // Show the actual state_data from the session
-                    $stateData = $session->state_data;
-                    if ($stateData) {
-                        // Ensure it's an array
-                        if (is_string($stateData)) {
-                            $stateData = json_decode($stateData, true);
-                        }
-                        if (is_array($stateData)) {
-                            $contextState = $stateData;
-                        }
-                    }
-
-                    // Show context_data if it exists
-                    $contextData = $session->context_data;
-                    if ($contextData) {
-                        // Ensure it's an array
-                        if (is_string($contextData)) {
-                            $contextData = json_decode($contextData, true);
-                        }
-                        if (is_array($contextData)) {
-                            $contextChanges = ['session_context' => $contextData];
-                        }
-                    }
-                } else {
-                    // Debug: Show that no session was found
-                    $contextState = [
-                        '_debug' => [
-                            'session_id' => $span->session_id,
-                            'session_found' => 'no',
-                            'error' => 'No session found with this ID',
-                        ],
-                    ];
-                }
-            } catch (\Exception $e) {
-                // Handle any errors in fallback
-            }
-        }
-
-        // Get memory data for this session
-        try {
-            $memories = \Vizra\VizraADK\Models\AgentMemory::where('session_id', $span->session_id)
-                ->orderBy('created_at', 'asc')
-                ->get();
-
-            if ($memories->isNotEmpty()) {
-                $memoryData = [];
-                foreach ($memories as $memory) {
-                    $memoryData[] = [
-                        'type' => $memory->type,
-                        'key' => $memory->key,
-                        'content' => $memory->content,
-                        'scope' => $memory->scope,
-                        'created_at' => $memory->created_at->format('Y-m-d H:i:s'),
-                    ];
-                }
-
-                // Show memories in context changes
-                if (! empty($memoryData)) {
-                    if (! $contextChanges) {
-                        $contextChanges = [];
-                    }
-                    $contextChanges['memories'] = $memoryData;
-                    $contextChanges['memory_count'] = count($memoryData);
-                }
-            }
-
-            // Also extract any JSON from agent output for debugging purposes
-            $outputData = $processData($span->output);
-            if (is_array($outputData) && isset($outputData['response']) && is_string($outputData['response'])) {
-                // Look for JSON code blocks in the response
-                if (preg_match('/```json\s*(\{.*?\})\s*```/s', $outputData['response'], $matches)) {
-                    try {
-                        $jsonData = json_decode($matches[1], true);
-                        if (json_last_error() === JSON_ERROR_NONE && is_array($jsonData)) {
-                            $extractedJson = $jsonData;
-                        }
-                    } catch (\Exception $e) {
-                        // Ignore JSON parsing errors
-                    }
-                }
-            }
-        } catch (\Exception $e) {
-            // Ignore errors when fetching context data
-        }
-
-        return [
-            'span_id' => $span->span_id,
-            'trace_id' => $span->trace_id,
-            'name' => $span->name,
-            'type' => $span->type,
-            'status' => $span->status,
-            'start_time' => $startFormatted,
-            'end_time' => $endFormatted,
-            'duration_ms' => $duration,
-            'input_data' => $processData($span->input),
-            'output_data' => $processData($span->output),
-            'error_data' => $span->error_message ? ['message' => $span->error_message] : null,
-            'metadata' => $processData($span->metadata),
-            'context_state' => $contextState,
-            'context_changes' => $contextChanges,
-            'extracted_json' => $extractedJson,
-            'children' => $children->map(function ($child) use ($spansByParent) {
-                return $this->buildSpanNode($child, $spansByParent);
-            })->toArray(),
-        ];
     }
 
     public function setActiveTab($tab)

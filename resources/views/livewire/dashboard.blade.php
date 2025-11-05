@@ -229,6 +229,202 @@
             </div>
         </div>
 
+        <!-- Session Explorer -->
+        <div class="bg-gray-900/50 backdrop-blur-xl rounded-2xl p-8 border border-gray-800/50">
+            <div class="flex items-center justify-between mb-6">
+                <div>
+                    <h2 class="text-2xl font-bold text-white">Session Explorer</h2>
+                    <p class="text-gray-400 text-sm mt-1">Load any saved session from the database and review the complete execution trace.</p>
+                </div>
+                <div class="flex items-center space-x-2 text-xs text-gray-400">
+                    <span class="inline-flex items-center px-2 py-1 bg-gray-800/60 rounded-md border border-gray-700/60">
+                        <svg class="w-3.5 h-3.5 mr-1 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6 6 0 10-12 0v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                        </svg>
+                        Live Trace Viewer
+                    </span>
+                    <span class="inline-flex items-center px-2 py-1 bg-gray-800/60 rounded-md border border-gray-700/60">
+                        <svg class="w-3.5 h-3.5 mr-1 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6l4 2" />
+                        </svg>
+                        Historical Sessions
+                    </span>
+                </div>
+            </div>
+
+            <div class="grid lg:grid-cols-3 gap-6">
+                <!-- Session List -->
+                <div class="lg:col-span-1 space-y-6">
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Search</label>
+                        <div class="relative">
+                            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                <svg class="h-4 w-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35M18 11a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                </svg>
+                            </div>
+                            <input type="text"
+                                   wire:model.debounce.500ms="sessionSearch"
+                                   placeholder="Filter by session ID or agent name"
+                                   class="w-full bg-gray-800/60 border border-gray-700/60 rounded-lg pl-10 pr-3 py-2 text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/60">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Load by Session ID</label>
+                        <div class="flex space-x-2">
+                            <input type="text"
+                                   wire:model.defer="sessionLookupId"
+                                   placeholder="Paste a session identifier"
+                                   class="flex-1 bg-gray-800/60 border border-gray-700/60 rounded-lg px-3 py-2 text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/60">
+                            <button wire:click="loadSessionById"
+                                    wire:loading.attr="disabled"
+                                    class="px-4 py-2 bg-blue-600/80 hover:bg-blue-500/80 text-white text-sm font-semibold rounded-lg transition">
+                                Load
+                            </button>
+                        </div>
+                        <p class="text-[11px] text-gray-500 mt-2">Type or paste any stored session ID to jump directly to its trace.</p>
+                    </div>
+
+                    <div>
+                        <div class="flex items-center justify-between mb-3">
+                            <h3 class="text-sm font-semibold text-gray-300">Recent Sessions</h3>
+                            <span class="text-xs text-gray-500">{{ count($sessionList) }} shown</span>
+                        </div>
+                        <div class="space-y-2 max-h-72 overflow-y-auto custom-scrollbar pr-1">
+                            @forelse($sessionList as $session)
+                                <button type="button"
+                                        wire:click="selectSession('{{ $session['session_id'] }}')"
+                                        wire:key="session-option-{{ $session['session_id'] }}"
+                                        class="w-full text-left px-3 py-2 border rounded-lg transition {{ $selectedSessionId === $session['session_id'] ? 'bg-blue-900/40 border-blue-700/60 text-white' : 'bg-gray-800/40 border-gray-700/60 text-gray-300 hover:bg-gray-800/60' }}">
+                                    <div class="flex items-start justify-between">
+                                        <div class="pr-3">
+                                            <p class="text-sm font-medium truncate">{{ $session['agent_name'] }}</p>
+                                            <p class="text-[11px] text-gray-400 font-mono break-all">{{ $session['session_id'] }}</p>
+                                        </div>
+                                        <div class="text-right text-[11px] text-gray-400">
+                                            <p>{{ $session['messages_count'] }} msgs</p>
+                                            <p class="mt-1">{{ $session['updated_at'] ?? '—' }}</p>
+                                        </div>
+                                    </div>
+                                </button>
+                            @empty
+                                <div class="bg-gray-800/40 border border-gray-700/60 rounded-lg px-3 py-4 text-sm text-gray-400 text-center">
+                                    No sessions found.
+                                </div>
+                            @endforelse
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Trace Viewer -->
+                <div class="lg:col-span-2">
+                    <div class="bg-gray-800/40 border border-gray-700/60 rounded-2xl h-full flex flex-col">
+                        <div class="px-5 py-4 border-b border-gray-700/60 flex items-start justify-between">
+                            <div>
+                                <h3 class="text-lg font-semibold text-white">Execution Trace</h3>
+                                @if(!empty($selectedSessionDetails))
+                                    <div class="mt-1 space-y-1 text-xs text-gray-400">
+                                        <div class="font-mono text-gray-300 break-all">Session: {{ $selectedSessionDetails['session_id'] }}</div>
+                                        <div class="flex flex-wrap gap-x-3">
+                                            <span>{{ $selectedSessionDetails['agent_name'] }}</span>
+                                            <span>{{ $selectedSessionDetails['messages_count'] }} messages</span>
+                                        </div>
+                                    </div>
+                                @elseif($selectedSessionId)
+                                    <p class="mt-1 text-xs text-gray-400">Searching session details…</p>
+                                @else
+                                    <p class="mt-1 text-xs text-gray-400">Select a session to inspect its execution timeline.</p>
+                                @endif
+                            </div>
+                            <div class="flex items-center space-x-2">
+                                @if($selectedSessionId)
+                                    <button wire:click="refreshSelectedSessionTrace"
+                                            wire:loading.attr="disabled"
+                                            class="inline-flex items-center px-3 py-2 text-xs font-semibold rounded-lg border border-gray-700/60 text-gray-300 hover:bg-gray-700/60 transition">
+                                        <svg class="w-3.5 h-3.5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9M20 20v-5h-.581m-15.357-2a8.003 8.003 0 0015.357 2" />
+                                        </svg>
+                                        Refresh
+                                    </button>
+                                @endif
+                            </div>
+                        </div>
+
+                        @if(!empty($selectedSessionDetails))
+                            <div class="px-5 py-4 border-b border-gray-700/60 grid sm:grid-cols-2 gap-4 text-sm text-gray-300">
+                                <div class="bg-gray-900/40 border border-gray-700/60 rounded-lg p-3">
+                                    <p class="text-xs uppercase text-gray-500 mb-1">Created</p>
+                                    <p>{{ $selectedSessionDetails['created_at'] ?? 'Unknown' }}</p>
+                                </div>
+                                <div class="bg-gray-900/40 border border-gray-700/60 rounded-lg p-3">
+                                    <p class="text-xs uppercase text-gray-500 mb-1">Last Updated</p>
+                                    <p>{{ $selectedSessionDetails['updated_at'] ?? 'Unknown' }}</p>
+                                </div>
+                            </div>
+                        @endif
+
+                        <div class="flex-1 overflow-hidden"
+                             @if($sessionHasRunningTraces) wire:poll.2s="refreshSelectedSessionTrace" @endif
+                             x-data="{ expandedSpans: {} }"
+                             wire:key="session-trace-viewer-{{ $selectedSessionId ?? 'none' }}">
+                            <div wire:loading.flex
+                                 wire:target="selectSession,loadSessionById,refreshSelectedSessionTrace"
+                                 class="h-full items-center justify-center text-gray-400">
+                                <div class="flex flex-col items-center space-y-2">
+                                    <svg class="w-6 h-6 animate-spin text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 12a8 8 0 018-8" />
+                                    </svg>
+                                    <span class="text-sm">Loading trace data…</span>
+                                </div>
+                            </div>
+
+                            <div class="h-full overflow-y-auto custom-scrollbar"
+                                 wire:loading.remove
+                                 wire:target="selectSession,loadSessionById,refreshSelectedSessionTrace">
+                                @if($traceError)
+                                    <div class="m-5 bg-red-900/20 border border-red-800/40 rounded-lg p-5 text-sm text-red-200">
+                                        <h4 class="text-red-300 font-semibold mb-2">Unable to load trace</h4>
+                                        <p>{{ $traceError }}</p>
+                                    </div>
+                                @elseif(empty($selectedSessionId))
+                                    <div class="h-full flex items-center justify-center text-center px-6 py-12">
+                                        <div>
+                                            <div class="mx-auto flex items-center justify-center h-14 w-14 rounded-full bg-gray-800/60 mb-4">
+                                                <svg class="w-7 h-7 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                                </svg>
+                                            </div>
+                                            <h4 class="text-lg font-semibold text-white mb-2">Choose a session</h4>
+                                            <p class="text-gray-400 text-sm">Use the list on the left or paste a session ID to explore its execution history.</p>
+                                        </div>
+                                    </div>
+                                @elseif(empty($sessionTrace))
+                                    <div class="h-full flex items-center justify-center text-center px-6 py-12">
+                                        <div>
+                                            <div class="mx-auto flex items-center justify-center h-14 w-14 rounded-full bg-gray-800/60 mb-4">
+                                                <svg class="w-7 h-7 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-6a2 2 0 00-2-2H7a2 2 0 00-2 2v6m0 0v1a2 2 0 002 2h10a2 2 0 002-2v-1m-6 0h6" />
+                                                </svg>
+                                            </div>
+                                            <h4 class="text-lg font-semibold text-white mb-2">No trace data available</h4>
+                                            <p class="text-gray-400 text-sm">This session does not have any recorded spans yet. Trigger the agent to generate new traces.</p>
+                                        </div>
+                                    </div>
+                                @else
+                                    <div class="p-5 space-y-1">
+                                        @foreach($sessionTrace as $span)
+                                            @include('vizra-adk::partials.trace-span', ['span' => $span, 'level' => 0])
+                                        @endforeach
+                                    </div>
+                                @endif
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Your Agents -->
         @if($agentCount > 0)
         <div class="bg-gray-900/50 backdrop-blur-xl rounded-2xl p-8 border border-gray-800/50">
