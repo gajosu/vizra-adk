@@ -63,13 +63,13 @@ class OpenAICompatibleController extends Controller
             $executor = Agent::named($agentName);
 
             // Apply optional parameters
-            if ($request->has('temperature')) {
+            if ($request->has('temperature') && $this->allowsGenerationParameter($request->input('model'), 'temperature')) {
                 $executor->setTemperature($request->input('temperature'));
             }
-            if ($request->has('max_tokens')) {
+            if ($request->has('max_tokens') && $this->allowsGenerationParameter($request->input('model'), 'max_tokens')) {
                 $executor->setMaxTokens($request->input('max_tokens'));
             }
-            if ($request->has('top_p')) {
+            if ($request->has('top_p') && $this->allowsGenerationParameter($request->input('model'), 'top_p')) {
                 $executor->setTopP($request->input('top_p'));
             }
 
@@ -120,6 +120,18 @@ class OpenAICompatibleController extends Controller
         }
 
         return $model;
+    }
+
+    /**
+     * Check if a given generation parameter is compatible with the requested model.
+     */
+    protected function allowsGenerationParameter(string $model, string $parameter): bool
+    {
+        if (Str::startsWith($model, 'gpt-5')) {
+            return ! in_array($parameter, ['temperature', 'top_p', 'max_tokens'], true);
+        }
+
+        return true;
     }
 
     /**
