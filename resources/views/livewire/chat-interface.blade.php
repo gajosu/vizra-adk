@@ -257,7 +257,14 @@ function testModalButton() {
 </script>
 @endpush
 
-<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-col h-full w-full chat-interface-container">
+<div
+    x-data="{
+        showLoadSessionModal: @entangle('showLoadSessionModal').live,
+        loadSessionId: @entangle('loadSessionId').live
+    }"
+    x-on:keydown.escape.window="if (showLoadSessionModal) { showLoadSessionModal = false; $wire.closeLoadSessionModal(); }"
+    class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-col h-full w-full chat-interface-container"
+>
         <!-- Minimal Header -->
         <div class="text-center mb-4 flex-shrink-0">
             <h1 class="text-2xl font-bold text-white mb-2">Chat Interface</h1>
@@ -296,7 +303,8 @@ function testModalButton() {
             </div>
 
             <div class="flex items-center space-x-2">
-                <button wire:click="openLoadSessionModal"
+                <button type="button"
+                        x-on:click="loadSessionId = ''; showLoadSessionModal = true; $wire.openLoadSessionModal()"
                         class="inline-flex items-center px-4 py-2.5 bg-gray-800 border border-gray-700 text-sm font-medium rounded-xl text-gray-300 hover:bg-gray-700 hover:border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all duration-200">
                     <svg class="w-4 h-4 mr-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
@@ -1109,62 +1117,75 @@ function testModalButton() {
     </div>
 
     <!-- Load Session ID Modal -->
-    @if($showLoadSessionModal)
-        <div class="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
-            <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-                <!-- Background overlay -->
-                <div class="fixed inset-0 bg-gray-900 bg-opacity-75 transition-opacity" wire:click="closeLoadSessionModal"></div>
+    <div
+        x-cloak
+        x-show="showLoadSessionModal"
+        x-transition.opacity
+        class="fixed inset-0 z-50 overflow-y-auto"
+        aria-labelledby="modal-title"
+        role="dialog"
+        aria-modal="true"
+    >
+        <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+            <!-- Background overlay -->
+            <div
+                class="fixed inset-0 bg-gray-900 bg-opacity-75 transition-opacity"
+                x-on:click="showLoadSessionModal = false; $wire.closeLoadSessionModal()"
+            ></div>
 
-                <!-- Modal panel -->
-                <div class="inline-block align-bottom bg-gray-800 rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
-                    <div class="bg-gray-800 px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-                        <div class="sm:flex sm:items-start">
-                            <div class="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-blue-900/50 sm:mx-0 sm:h-10 sm:w-10">
-                                <svg class="h-6 w-6 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
-                                </svg>
-                            </div>
-                            <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left w-full">
-                                <h3 class="text-lg leading-6 font-medium text-white" id="modal-title">
-                                    Load Session ID
-                                </h3>
-                                <div class="mt-4">
-                                    <p class="text-sm text-gray-400 mb-4">
-                                        Enter a session ID to load an existing conversation with its traces and context.
-                                    </p>
-                                    <div class="mt-2">
-                                        <label for="session-id-input" class="block text-sm font-medium text-gray-300">
-                                            Session ID
-                                        </label>
-                                        <input type="text"
-                                               id="session-id-input"
-                                               wire:model="loadSessionId"
-                                               wire:keydown.enter="loadSessionFromModal"
-                                               placeholder="e.g., chat-abc123de"
-                                               class="mt-1 block w-full px-3 py-2 border border-gray-700 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm bg-gray-900 text-gray-200">
-                                        <p class="mt-1 text-xs text-gray-500">Current session: {{ $sessionId }}</p>
-                                    </div>
+            <!-- Modal panel -->
+            <div
+                x-transition.scale
+                class="inline-block align-bottom bg-gray-800 rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full"
+            >
+                <div class="bg-gray-800 px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                    <div class="sm:flex sm:items-start">
+                        <div class="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-blue-900/50 sm:mx-0 sm:h-10 sm:w-10">
+                            <svg class="h-6 w-6 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
+                            </svg>
+                        </div>
+                        <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left w-full">
+                            <h3 class="text-lg leading-6 font-medium text-white" id="modal-title">
+                                Load Session ID
+                            </h3>
+                            <div class="mt-4">
+                                <p class="text-sm text-gray-400 mb-4">
+                                    Enter a session ID to load an existing conversation with its traces and context.
+                                </p>
+                                <div class="mt-2">
+                                    <label for="session-id-input" class="block text-sm font-medium text-gray-300">
+                                        Session ID
+                                    </label>
+                                    <input type="text"
+                                           id="session-id-input"
+                                           x-model="loadSessionId"
+                                           wire:model.live="loadSessionId"
+                                           x-on:keydown.enter.prevent="showLoadSessionModal = false; $wire.loadSessionFromModal()"
+                                           placeholder="e.g., chat-abc123de"
+                                           class="mt-1 block w-full px-3 py-2 border border-gray-700 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm bg-gray-900 text-gray-200">
+                                    <p class="mt-1 text-xs text-gray-500">Current session: {{ $sessionId }}</p>
                                 </div>
                             </div>
                         </div>
                     </div>
-                    <div class="bg-gray-900 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
-                        <button type="button"
-                                wire:click="loadSessionFromModal"
-                                class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-blue-500 sm:ml-3 sm:w-auto sm:text-sm"
-                                @if(empty($loadSessionId)) disabled @endif>
-                            Load Session
-                        </button>
-                        <button type="button"
-                                wire:click="closeLoadSessionModal"
-                                class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-700 shadow-sm px-4 py-2 bg-gray-800 text-base font-medium text-gray-300 hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-blue-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm">
-                            Cancel
-                        </button>
-                    </div>
+                </div>
+                <div class="bg-gray-900 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+                    <button type="button"
+                            x-bind:disabled="!loadSessionId || !loadSessionId.trim()"
+                            x-on:click="$wire.loadSessionFromModal(); showLoadSessionModal = false"
+                            class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed sm:ml-3 sm:w-auto sm:text-sm">
+                        Load Session
+                    </button>
+                    <button type="button"
+                            x-on:click="showLoadSessionModal = false; $wire.closeLoadSessionModal()"
+                            class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-700 shadow-sm px-4 py-2 bg-gray-800 text-base font-medium text-gray-300 hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-blue-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm">
+                        Cancel
+                    </button>
                 </div>
             </div>
         </div>
-    @endif
+    </div>
 
         <!-- Scripts -->
         <script>
