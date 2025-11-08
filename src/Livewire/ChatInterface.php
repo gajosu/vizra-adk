@@ -58,6 +58,80 @@ class ChatInterface extends Component
 
     // Track if agent was set from URL to prevent re-initialization
 
+    private function restoreSessionState(): void
+    {
+        if (empty($this->sessionId)) {
+            $this->chatHistory = [];
+
+            return;
+        }
+
+        $query = AgentSession::where('session_id', $this->sessionId)
+            ->with(['messages' => function ($query) {
+                $query->orderBy('created_at');
+            }])
+            ->orderByDesc('updated_at');
+
+        if (! empty($this->selectedAgent)) {
+            $query->where('agent_name', $this->selectedAgent);
+        }
+
+        $session = $query->first();
+
+        if (! $session && ! empty($this->selectedAgent)) {
+            $session = AgentSession::where('session_id', $this->sessionId)
+                ->with(['messages' => function ($query) {
+                    $query->orderBy('created_at');
+                }])
+                ->orderByDesc('updated_at')
+                ->first();
+        }
+
+        if (! $session) {
+            $this->chatHistory = [];
+            $this->sessionData = [];
+            $this->contextData = [];
+            $this->contextStateData = [];
+            $this->longTermMemoryData = [];
+            $this->traceData = [];
+            $this->hasRunningTraces = false;
+            $this->dispatch('chat-updated');
+
+            return;
+        }
+
+        $agentName = $session->agent_name;
+
+        if ($this->selectedAgent !== $agentName) {
+            $this->selectedAgent = $agentName;
+            $this->loadAgentInfo();
+        }
+
+        $this->isLoading = false;
+
+        $this->chatHistory = $session->messages->map(function ($message) {
+            $content = $message->content;
+
+            if (is_array($content)) {
+                $content = json_encode($content, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+            }
+
+            return [
+                'role' => $message->role,
+                'content' => $content,
+                'timestamp' => $message->created_at ? $message->created_at->format('H:i:s') : null,
+                'tool_name' => $message->tool_name,
+            ];
+        })->toArray();
+
+        // Refresh related panels and trace information with the restored state
+        $this->loadContextData();
+        $this->loadTraceData();
+
+        // Ensure UI updates reflect restored conversation
+        $this->dispatch('chat-updated');
+    }
+
     public function mount()
     {
         $this->sessionId = $this->generateUniqueSessionId();
@@ -543,12 +617,8 @@ class ChatInterface extends Component
         }
 
         $this->sessionId = $this->loadSessionId;
-        $this->loadContextData();
-        $this->loadTraceData();
+        $this->restoreSessionState();
         $this->closeLoadSessionModal();
-
-        // Dispatch event to scroll chat to bottom after loading session
-        $this->dispatch('chat-updated');
     }
 
     public function refreshData()
@@ -710,8 +780,7 @@ class ChatInterface extends Component
     public function setSessionId($sessionId)
     {
         $this->sessionId = $sessionId;
-        $this->loadContextData();
-        $this->loadTraceData();
+        $this->restoreSessionState();
     }
 
     #[On('refresh-trace-data')]
