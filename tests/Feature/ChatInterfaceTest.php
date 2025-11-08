@@ -2,6 +2,8 @@
 
 use Livewire\Livewire;
 use Vizra\VizraADK\Livewire\ChatInterface;
+use Vizra\VizraADK\Models\AgentSession;
+use Vizra\VizraADK\Models\TraceSpan;
 
 test('chat interface loads correctly', function () {
     Livewire::test(ChatInterface::class)
@@ -29,6 +31,55 @@ test('can load session from modal', function () {
         ->call('loadSessionFromModal')
         ->assertSet('sessionId', $testSessionId)
         ->assertSet('showLoadSessionModal', false);
+});
+
+test('loading an existing session restores chat history and traces', function () {
+    $session = AgentSession::create([
+        'session_id' => 'existing-session-123',
+        'agent_name' => 'restored_agent',
+        'state_data' => ['foo' => 'bar'],
+    ]);
+
+    $session->messages()->create([
+        'role' => 'user',
+        'content' => 'Hola agente',
+    ]);
+
+    $session->messages()->create([
+        'role' => 'assistant',
+        'content' => 'Respuesta guardada',
+    ]);
+
+    TraceSpan::create([
+        'trace_id' => 'trace-1',
+        'span_id' => 'span-1',
+        'session_id' => $session->session_id,
+        'agent_name' => $session->agent_name,
+        'type' => 'agent_run',
+        'name' => 'Agent Run',
+        'status' => 'success',
+        'start_time' => microtime(true),
+        'end_time' => microtime(true) + 0.5,
+    ]);
+
+    Livewire::test(ChatInterface::class)
+        ->call('openLoadSessionModal')
+        ->set('loadSessionId', $session->session_id)
+        ->call('loadSessionFromModal')
+        ->assertSet('sessionId', $session->session_id)
+        ->assertSet('selectedAgent', $session->agent_name)
+        ->assertCount('chatHistory', 2)
+        ->tap(function ($component) {
+            $chatHistory = $component->get('chatHistory');
+            expect($chatHistory[0]['role'])->toBe('user');
+            expect($chatHistory[0]['content'])->toBe('Hola agente');
+            expect($chatHistory[1]['role'])->toBe('assistant');
+            expect($chatHistory[1]['content'])->toBe('Respuesta guardada');
+
+            $traceData = $component->get('traceData');
+            expect($traceData)->not->toBeEmpty();
+            expect($traceData[0]['name'])->toBe('Agent Run');
+        });
 });
 
 test('load session modal validates empty session id', function () {
