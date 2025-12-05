@@ -251,16 +251,16 @@ abstract class BaseLlmAgent extends BaseAgent
         if ($this->provider === null) {
             $defaultProvider = config('vizra-adk.default_provider', 'openai');
             $this->provider = match ($defaultProvider) {
-                'openai' => Provider::OpenAI,
-                'anthropic' => Provider::Anthropic,
-                'gemini', 'google' => Provider::Gemini,
-                'deepseek' => Provider::DeepSeek,
-                'ollama' => Provider::Ollama,
-                'mistral' => Provider::Mistral,
-                'groq' => Provider::Groq,
-                'xai', 'grok' => Provider::XAI,
-                'voyageai', 'voyage' => Provider::VoyageAI,
-                'openrouter' => Provider::OpenRouter,
+                'openai' => Provider::OpenAI->value,
+                'anthropic' => Provider::Anthropic->value,
+                'gemini', 'google' => Provider::Gemini->value,
+                'deepseek' => Provider::DeepSeek->value,
+                'ollama' => Provider::Ollama->value,
+                'mistral' => Provider::Mistral->value,
+                'groq' => Provider::Groq->value,
+                'xai', 'grok' => Provider::XAI->value,
+                'voyageai', 'voyage' => Provider::VoyageAI->value,
+                'openrouter' => Provider::OpenRouter->value,
                 default => $this->resolveCustomProvider($defaultProvider),
             };
         }
@@ -830,14 +830,15 @@ abstract class BaseLlmAgent extends BaseAgent
 
                     try {
                         foreach ($llmResponse as $event) {
-                            // Prism now uses StreamEvent objects with type() method
-                            if (is_object($event) && method_exists($event, 'type')) {
-                                $eventType = $event->type()->value;
+                            // Prism yields Chunk objects with chunkType property (not type() method)
+                            if (is_object($event) && property_exists($event, 'text')) {
+                                // Get event type from chunkType enum property
+                                $eventType = $event->chunkType->value ?? 'text';
 
                                 // Accumulate different event types
                                 match ($eventType) {
-                                    'text_delta', 'text-delta' => $streamData['text'] .= $event->delta ?? '',
-                                    'thinking_delta', 'thinking-delta' => $streamData['thinking'] .= $event->delta ?? '',
+                                    'text_delta', 'text-delta', 'text' => $streamData['text'] .= $event->text ?? '',
+                                    'thinking_delta', 'thinking-delta', 'thinking' => $streamData['thinking'] .= $event->text ?? '',
                                     'tool_call', 'tool-call' => isset($event->toolCall) ? $streamData['toolCalls'][] = [
                                         'name' => $event->toolCall->name ?? 'unknown',
                                         'id' => $event->toolCall->id ?? null,
