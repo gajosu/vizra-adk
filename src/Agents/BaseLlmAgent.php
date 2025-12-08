@@ -4,6 +4,7 @@ namespace Vizra\VizraADK\Agents;
 
 use Generator;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Str;
 use Prism\Prism\Enums\Provider;
 use Prism\Prism\Facades\Tool;
 use Prism\Prism\Prism;
@@ -211,16 +212,16 @@ abstract class BaseLlmAgent extends BaseAgent
                 ->withMaxSteps($this->maxSteps); // Prism will handle tool execution internally
         }
 
-        // Add generation parameters if set
-        if ($this->getTemperature() !== null) {
+        // Add generation parameters if supported by the current model
+        if ($this->isGenerationParameterSupported('temperature') && $this->getTemperature() !== null) {
             $prismRequest = $prismRequest->usingTemperature($this->getTemperature());
         }
 
-        if ($this->getMaxTokens() !== null) {
+        if ($this->isGenerationParameterSupported('max_tokens') && $this->getMaxTokens() !== null) {
             $prismRequest = $prismRequest->withMaxTokens($this->getMaxTokens());
         }
 
-        if ($this->getTopP() !== null) {
+        if ($this->isGenerationParameterSupported('top_p') && $this->getTopP() !== null) {
             $prismRequest = $prismRequest->usingTopP($this->getTopP());
         }
 
@@ -345,6 +346,28 @@ abstract class BaseLlmAgent extends BaseAgent
         $this->model = $model;
 
         return $this;
+    }
+
+    /**
+     * Determine if a generation parameter should be sent to the underlying provider.
+     */
+    protected function isGenerationParameterSupported(string $parameter): bool
+    {
+        return ! in_array($parameter, $this->getUnsupportedGenerationParameters(), true);
+    }
+
+    /**
+     * Parameters that must be omitted for the active model to avoid provider errors.
+     */
+    protected function getUnsupportedGenerationParameters(): array
+    {
+        $model = $this->getModel();
+
+        if (Str::startsWith($model, 'gpt-5')) {
+            return ['temperature', 'top_p', 'max_tokens'];
+        }
+
+        return [];
     }
 
     public function getTemperature(): ?float
@@ -1120,9 +1143,9 @@ abstract class BaseLlmAgent extends BaseAgent
             ],
             metadata: [
                 'provider' => $this->getProvider(),
-                'temperature' => $this->getTemperature(),
-                'max_tokens' => $this->getMaxTokens(),
-                'top_p' => $this->getTopP(),
+                'temperature' => $this->isGenerationParameterSupported('temperature') ? $this->getTemperature() : null,
+                'max_tokens' => $this->isGenerationParameterSupported('max_tokens') ? $this->getMaxTokens() : null,
+                'top_p' => $this->isGenerationParameterSupported('top_p') ? $this->getTopP() : null,
             ],
             context: $context
         );

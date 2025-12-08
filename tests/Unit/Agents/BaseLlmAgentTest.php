@@ -39,6 +39,37 @@ it('can get max tokens', function () {
     expect($maxTokens)->toBe(1000);
 });
 
+it('reports generation parameters as supported for classic models', function () {
+    $agent = new TestLlmAgent;
+
+    expect($agent->supportsParameterForTest('temperature'))->toBeTrue();
+    expect($agent->supportsParameterForTest('top_p'))->toBeTrue();
+    expect($agent->supportsParameterForTest('max_tokens'))->toBeTrue();
+});
+
+it('disables legacy sampling parameters for gpt-5 models', function () {
+    $agent = new class extends BaseLlmAgent {
+        protected string $name = 'gpt5-test-agent';
+        protected string $description = 'Test agent for GPT-5 compatibility checks';
+        protected string $instructions = 'Test instructions';
+        protected string $model = 'gpt-5';
+
+        public function execute(mixed $input, AgentContext $context): mixed
+        {
+            return 'test';
+        }
+
+        public function supportsParameterForTest(string $parameter): bool
+        {
+            return $this->isGenerationParameterSupported($parameter);
+        }
+    };
+
+    expect($agent->supportsParameterForTest('temperature'))->toBeFalse();
+    expect($agent->supportsParameterForTest('top_p'))->toBeFalse();
+    expect($agent->supportsParameterForTest('max_tokens'))->toBeFalse();
+});
+
 it('can load tools', function () {
     $tools = $this->agent->getLoadedTools();
     expect($tools)->toBeArray();
@@ -306,6 +337,11 @@ class TestLlmAgent extends BaseLlmAgent
     public function getMaxTokens(): ?int
     {
         return $this->maxTokens;
+    }
+
+    public function supportsParameterForTest(string $parameter): bool
+    {
+        return $this->isGenerationParameterSupported($parameter);
     }
 
     public function getLoadedTools(): array
